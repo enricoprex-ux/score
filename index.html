@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Wheelchair Libertas 1947 - Stats Tracker</title>
+  
+  <!-- Configurazione iOS / PWA per iPad -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Libertas 1947">
+  
+  <!-- Icona Schermata Home iPad e Favicon -->
+  <link rel="apple-touch-icon" href="logo-libertas.jpg">
+  <link rel="icon" type="image/jpeg" href="logo-libertas.jpg">
+
+  <!-- Tailwind CSS e FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Libreria SheetJS per l'esportazione in vero formato Excel (.xlsx) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    /* Personalizzazione colore Amaranto Libertas */
+    .bg-amaranto { background-color: #800020; }
+    .bg-amaranto-dark { background-color: #580016; }
+    .text-amaranto { color: #800020; }
+    .border-amaranto { border-color: #800020; }
+
+    /* Stili ottimizzati per interfaccia Touch / iPad */
+    body {
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Effetto illuminazione al click dei pulsanti */
+    .btn-active-feedback {
+      box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.9), 0 0 10px 2px rgba(250, 204, 21, 0.8) !important;
+      filter: brightness(1.4) !important;
+      transform: scale(0.97);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex flex-col h-screen overflow-hidden">
+
+  <!-- TOP BAR / HEADER (Colore Amaranto) -->
+  <header class="bg-amaranto text-white px-4 py-2 flex items-center justify-between shadow-md z-10 shrink-0">
+    <div class="flex items-center space-x-3">
+      <!-- Logo e Titolo Squadra -->
+      <img src="logo-libertas.jpg" onerror="this.src='https://placehold.co/80x80/800020/ffffff?text=LIBERTAS'" alt="Logo Libertas Livorno 1947" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow">
+      <div>
+        <h1 class="text-lg font-bold leading-none">Wheelchair Libertas 1947</h1>
+        <p class="text-xs text-red-200 mt-0.5" id="game-info-display">Partita non configurata</p>
+      </div>
+    </div>
+
+    <!-- Punteggio Tabellone con Gestione Punti Avversari -->
+    <div class="flex items-center space-x-4 bg-amaranto-dark px-4 py-1.5 rounded-lg border border-red-900 shadow-inner">
+      <div class="text-center">
+        <span class="text-[10px] block text-red-200 font-semibold uppercase">LIBERTAS</span>
+        <span class="text-2xl font-black text-yellow-400" id="score-team">0</span>
+      </div>
+      <span class="text-2xl font-bold text-red-300">-</span>
+      <div class="text-center flex flex-col items-center">
+        <span class="text-[10px] block text-red-200 font-semibold uppercase" id="opp-name-display">AVV</span>
+        <div class="flex items-center space-x-1.5">
+          <button onclick="addOpponentScore(-1, this)" class="w-5 h-5 bg-red-900/80 hover:bg-red-800 text-white rounded font-bold text-xs flex items-center justify-center border border-red-700 active:scale-95 transition-all" title="Sottrai 1 punto avversario">-</button>
+          <span class="text-2xl font-black text-white cursor-pointer hover:text-yellow-300 transition-colors" id="score-opp" onclick="promptSetOpponentScore()" title="Clicca per inserire il punteggio manuale">0</span>
+          <button onclick="addOpponentScore(1, this)" class="w-5 h-5 bg-red-900/80 hover:bg-red-800 text-white rounded font-bold text-xs flex items-center justify-center border border-red-700 active:scale-95 transition-all" title="Aggiungi 1 punto avversario">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pulsanti Azione Header -->
+    <div class="flex items-center space-x-2">
+      <button onclick="undoLastAction()" class="bg-amaranto-dark hover:bg-red-900 active:bg-black text-white text-xs font-semibold px-3 py-2 rounded shadow flex items-center space-x-1 border border-red-800 transition-all">
+        <i class="fa-solid fa-rotate-left"></i> <span>Annulla</span>
+      </button>
+      <button onclick="openConfigModal()" class="bg-amaranto-dark hover:bg-red-900 active:bg-black text-white text-xs font-semibold px-3 py-2 rounded shadow border border-red-800 transition-all">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+      <button onclick="exportXLS()" class="bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-semibold px-3 py-2 rounded shadow flex items-center space-x-1 transition-all">
+        <i class="fa-solid fa-file-excel"></i> <span>Export Excel</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTENUTO PRINCIPALE -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- PANNELLO SINISTRO: Gestione Campo + Roster Completo -->
+    <section class="w-1/2 border-r border-slate-300 flex flex-col bg-white">
+      
+      <!-- Sezione Gestione Quarti / Periodo -->
+      <div class="p-2 bg-slate-800 text-white flex items-center justify-between border-b border-slate-700 shrink-0">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Gestione Periodo:</span>
+        <div class="flex items-center space-x-2">
+          <select id="period-select" class="bg-amaranto text-white text-xs font-bold rounded px-3 py-1 border border-red-800 focus:outline-none" onchange="changePeriod(this.value)">
+            <option value="Q1">1° Quarto (Q1)</option>
+            <option value="Q2">2° Quarto (Q2)</option>
+            <option value="Q3">3° Quarto (Q3)</option>
+            <option value="Q4">4° Quarto (Q4)</option>
+            <option value="OT">Supplementare (OT)</option>
+          </select>
+          <button onclick="showQuarterStats()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded px-2 py-1"><i class="fa-solid fa-chart-column mr-1"></i>Statistiche quarto</button>
+        </div>
+      </div>
+
+      <!-- BANNER MONITORAGGIO PUNTI IN CAMPO (Basket in Carrozzina) -->
+      <div id="court-points-banner" class="p-2.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-700 shrink-0">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-wheelchair text-yellow-400 text-lg"></i>
+          <div>
+            <div class="text-[11px] uppercase text-slate-300 font-semibold leading-tight">Quintetto in Campo</div>
+            <div class="text-xs text-slate-400" id="court-count-display">Giocatori: 0/5</div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="text-[10px] uppercase text-slate-300 font-semibold">Punti Carrozzina Totali</div>
+          <div class="text-lg font-black" id="court-points-display">0.0 / 14.5</div>
+        </div>
+      </div>
+
+      <!-- AREA VISUALE GIOCATORI IN CAMPO -->
+      <div class="p-2 bg-emerald-50 border-b border-emerald-200 shrink-0">
+        <div class="text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+          <span><i class="fa-solid fa-users text-emerald-600 mr-1"></i> Giocatori Attualmente in Campo</span>
+          <span class="text-[10px] text-emerald-600 font-normal">Clicca sul giocatore per selezionarlo o per sostituirlo</span>
+        </div>
+        <div id="active-court-container" class="grid grid-cols-5 gap-1.5 min-h-[54px]">
+          <!-- Le 5 schede dei giocatori in campo verranno renderizzate qui -->
+        </div>
+      </div>
+
+      <!-- Header Roster Giocatori -->
+      <div class="p-2 bg-slate-200 border-b border-slate-300 flex justify-between items-center shrink-0">
+        <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Roster Completo (# Num - Nome)</span>
+        <button onclick="addManualPlayerPrompt()" class="text-[11px] bg-amaranto text-white px-2 py-0.5 rounded hover:bg-red-900 transition-all">+ Aggiungi Giocatore</button>
+      </div>
+      
+      <!-- Lista Giocatori Completa -->
+      <div class="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1.5" id="roster-list">
+        <!-- I giocatori verranno generati dinamicamente via JS -->
+      </div>
+    </section>
+
+    <!-- PANNELLO DESTRO: Pulsantiera Statistiche -->
+    <section class="w-1/2 flex flex-col bg-slate-50 p-3 overflow-y-auto">
+      
+      <!-- Giocatore Selezionato -->
+      <div class="bg-slate-800 text-white p-3 rounded-lg shadow mb-3 flex justify-between items-center shrink-0">
+        <div>
+          <span class="text-xs text-slate-400 block uppercase font-semibold">Giocatore Selezionato</span>
+          <div class="text-lg font-bold" id="selected-player-display">Nessun giocatore selezionato</div>
+        </div>
+        <div class="text-right">
+          <span class="text-xs text-slate-400 block uppercase font-semibold">Valutazione (PIR)</span>
+          <span class="text-xl font-black text-yellow-400" id="selected-player-pir">0</span>
+        </div>
+      </div>
+
+      <!-- Pulsanti Inserimento Azioni -->
+      <div class="grid grid-cols-2 gap-2 flex-1">
+        <!-- TIRI SEGNATI -->
+        <div class="space-y-2">
+          <span class="text-xs font-bold text-emerald-700 uppercase block border-b border-emerald-200 pb-1">Punti Segnati</span>
+          <button onclick="recordStat('FT_MADE', this)" class="w-full py-3 bg-emerald-600 active:bg-emerald-800 text-white font-bold rounded-lg shadow text-sm flex justify-between px-4 items-center transition-all">
+            <span>Tiro Libero</span> <span class="bg-emerald-700 px-2 py-0.5 rounded text-xs">+1 PT</span>
+          </button>
+          <button onclick="recordStat('FG2_MADE', this)" class="w-full py-3 bg-emerald-600 active:bg-emerald-800 text-white font-bold rounded-lg shadow text-sm flex justify-between px-4 items-center transition-all">
+            <span>2 Punti</span> <span class="bg-emerald-700 px-2 py-0.5 rounded text-xs">+2 PT</span>
+          </button>
+          <button onclick="recordStat('FG3_MADE', this)" class="w-full py-3 bg-emerald-600 active:bg-emerald-800 text-white font-bold rounded-lg shadow text-sm flex justify-between px-4 items-center transition-all">
+            <span>3 Punti</span> <span class="bg-emerald-700 px-2 py-0.5 rounded text-xs">+3 PT</span>
+          </button>
+        </div>
+
+        <!-- TIRI ERRATI -->
+        <div class="space-y-2">
+          <span class="text-xs font-bold text-rose-700 uppercase block border-b border-rose-200 pb-1">Tiri Sbagliati</span>
+          <button onclick="recordStat('FT_MISS', this)" class="w-full py-3 bg-rose-600 active:bg-rose-800 text-white font-bold rounded-lg shadow text-sm flex justify-between px-4 items-center transition-all">
+            <span>TL Sbagliato</span> <span class="bg-rose-700 px-2 py-0.5 rounded text-xs">TL-</span>
+          </button>
+          <button onclick="recordStat('FG2_MISS', this)" class="w-full py-3 bg-rose-600 active:bg-rose-800 text-white font-bold rounded-lg shadow text-sm flex justify-between px-4 items-center transition-all">
+            <span>2PT Sbagliato</span> <span class="bg-rose-700 px-2 py-0.5 rounded text-xs">2P-</span>
+          </button>
+          <button onclick="recordStat('FG3_MISS', this)" class="w-full py-3 bg-rose-600 active:bg-rose-800 text-white font-bold rounded-lg shadow text-sm flex justify-between px-4 items-center transition-all">
+            <span>3PT Sbagliato</span> <span class="bg-rose-700 px-2 py-0.5 rounded text-xs">3P-</span>
+          </button>
+        </div>
+
+        <!-- RIMBALZI & ASSIST -->
+        <div class="space-y-2 col-span-2 grid grid-cols-3 gap-2 mt-1">
+          <button onclick="recordStat('OREB', this)" class="py-2.5 bg-sky-700 active:bg-sky-900 text-white font-bold rounded-lg shadow text-xs transition-all">Rimb. Offensivo (RO)</button>
+          <button onclick="recordStat('DREB', this)" class="py-2.5 bg-sky-700 active:bg-sky-900 text-white font-bold rounded-lg shadow text-xs transition-all">Rimb. Difensivo (RD)</button>
+          <button onclick="recordStat('AST', this)" class="py-2.5 bg-indigo-700 active:bg-indigo-900 text-white font-bold rounded-lg shadow text-xs transition-all">Assist (AST)</button>
+        </div>
+
+        <!-- ALTRE AZIONI -->
+        <div class="space-y-2 col-span-2 grid grid-cols-4 gap-2">
+          <button onclick="recordStat('STL', this)" class="py-2.5 bg-amber-600 active:bg-amber-800 text-white font-bold rounded-lg shadow text-xs transition-all">Recupero (REC)</button>
+          <button onclick="recordStat('TO', this)" class="py-2.5 bg-orange-700 active:bg-orange-900 text-white font-bold rounded-lg shadow text-xs transition-all">Palla Persa (PER)</button>
+          <button onclick="recordStat('BLK', this)" class="py-2.5 bg-teal-700 active:bg-teal-900 text-white font-bold rounded-lg shadow text-xs transition-all">Stoppata (STP)</button>
+          <button onclick="recordStat('BLK_AGAINST', this)" class="py-2.5 bg-slate-600 active:bg-slate-800 text-white font-bold rounded-lg shadow text-xs transition-all">Stoppata Sub. (SUB)</button>
+        </div>
+
+        <!-- FALLI -->
+        <div class="space-y-2 col-span-2 grid grid-cols-2 gap-2">
+          <button onclick="recordStat('PF', this)" class="py-2.5 bg-purple-700 active:bg-purple-900 text-white font-bold rounded-lg shadow text-xs transition-all">Fallo Fatto (FF)</button>
+          <button onclick="recordStat('DF', this)" class="py-2.5 bg-fuchsia-700 active:bg-fuchsia-900 text-white font-bold rounded-lg shadow text-xs transition-all">Fallo Subito (FS)</button>
+        </div>
+
+        <!-- SEZIONE PUNTI AVVERSARI -->
+        <div class="col-span-2 mt-2 pt-2 border-t border-slate-300">
+          <span class="text-xs font-bold text-slate-700 uppercase block mb-1.5 flex items-center justify-between">
+            <span><i class="fa-solid fa-basketball text-amaranto mr-1"></i> Punti Squadra Avversaria</span>
+            <span class="text-[10px] text-slate-500 font-normal">Aggiornamento Rapido</span>
+          </span>
+          <div class="grid grid-cols-4 gap-2">
+            <button onclick="addOpponentScore(1, this)" class="py-2.5 bg-slate-700 active:bg-slate-900 text-white font-bold rounded-lg shadow text-xs transition-all">+1 PT Avv</button>
+            <button onclick="addOpponentScore(2, this)" class="py-2.5 bg-slate-700 active:bg-slate-900 text-white font-bold rounded-lg shadow text-xs transition-all">+2 PT Avv</button>
+            <button onclick="addOpponentScore(3, this)" class="py-2.5 bg-slate-700 active:bg-slate-900 text-white font-bold rounded-lg shadow text-xs transition-all">+3 PT Avv</button>
+            <button onclick="addOpponentScore(-1, this)" class="py-2.5 bg-rose-800 active:bg-rose-950 text-white font-bold rounded-lg shadow text-xs transition-all">-1 PT Avv</button>
+          </div>
+          <!-- Testo di firma ben visibile in amaranto -->
+          <div class="text-amaranto font-bold text-center mt-3 text-xs tracking-wide">
+            Developed & Registred by Enrico Prex
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- MODALE CONFIGURAZIONE PARTITA -->
+  <div id="config-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-xl shadow-2xl w-[28rem] space-y-4">
+      
+      <!-- Intestazione Titolo con Loghi ai lati -->
+      <div class="flex items-center justify-between border-b pb-2">
+        <img src="logo-libertas.jpg" onerror="this.src='https://placehold.co/80x80/800020/ffffff?text=LIBERTAS'" alt="Logo" class="w-8 h-8 rounded-full object-cover border border-amaranto">
+        <h3 class="text-xl font-extrabold text-amaranto text-center">Configurazione Partita</h3>
+        <img src="logo-libertas.jpg" onerror="this.src='https://placehold.co/80x80/800020/ffffff?text=LIBERTAS'" alt="Logo" class="w-8 h-8 rounded-full object-cover border border-amaranto">
+      </div>
+
+      <!-- SELEZIONE IN CASA / IN TRASFERTA -->
+      <div>
+        <label class="block text-xs font-bold text-amaranto uppercase mb-1">Tipo Partita</label>
+        <div class="flex items-center justify-around bg-slate-100 p-2 rounded border border-slate-300">
+          <label class="flex items-center space-x-2 cursor-pointer font-bold text-xs text-slate-800">
+            <input type="radio" name="match-location-type" value="casa" id="match-type-casa" checked onchange="onMatchTypeChange()" class="accent-red-800 w-4 h-4">
+            <span><i class="fa-solid fa-house text-amaranto mr-1"></i> In Casa</span>
+          </label>
+          <label class="flex items-center space-x-2 cursor-pointer font-bold text-xs text-slate-800">
+            <input type="radio" name="match-location-type" value="trasferta" id="match-type-trasferta" onchange="onMatchTypeChange()" class="accent-red-800 w-4 h-4">
+            <span><i class="fa-solid fa-plane-departure text-amaranto mr-1"></i> In Trasferta</span>
+          </label>
+        </div>
+      </div>
+      
+      <!-- Squadra Avversaria e Luogo Affiancati -->
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-xs font-bold text-amaranto uppercase mb-1">Squadra Avversaria</label>
+          <select id="opp-name-select" class="w-full border rounded p-2 text-xs font-bold bg-white text-slate-800" onchange="onOpponentSelectChange()">
+            <!-- Popolato dinamicamente da JS -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-amaranto uppercase mb-1">Luogo della Partita</label>
+          <input type="text" id="game-location-input" class="w-full border rounded p-2 text-xs font-semibold" placeholder="Es. Palestra D'Alesio">
+        </div>
+      </div>
+
+      <!-- Inserimento manuale di una nuova squadra avversaria -->
+      <div class="rounded-lg border border-dashed border-amaranto/50 bg-red-50/40 p-3 space-y-2">
+        <div class="text-xs font-bold text-amaranto uppercase"><i class="fa-solid fa-circle-plus mr-1"></i> Aggiungi una nuova squadra</div>
+        <div class="grid grid-cols-2 gap-2">
+          <input type="text" id="new-opponent-name" class="w-full min-w-0 border rounded p-2 text-xs" placeholder="Nome squadra">
+          <input type="text" id="new-opponent-venue" class="w-full min-w-0 border rounded p-2 text-xs" placeholder="Palazzetto / indirizzo">
+        </div>
+        <button type="button" onclick="addOpponentTeam()" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded p-2">
+          <i class="fa-solid fa-plus mr-1"></i> Aggiungi alla lista
+        </button>
+        <p class="text-[10px] text-slate-500">Le squadre aggiunte vengono salvate su questo dispositivo e saranno disponibili anche alla prossima apertura.</p>
+      </div>
+
+      <!-- Data della Partita -->
+      <div>
+        <label class="block text-xs font-bold text-amaranto uppercase mb-1">Data della Partita</label>
+        <input type="date" id="game-date-input" class="w-full border rounded p-2 text-sm">
+      </div>
+
+      <!-- Giornata (Menu a tendina) -->
+      <div>
+        <label class="block text-xs font-bold text-amaranto uppercase mb-1">Giornata</label>
+        <select id="game-round-select" class="w-full border rounded p-2 text-xs font-semibold">
+          <option value="Amichevole">Amichevole</option>
+          <option value="1° Giornata di Andata">1° Giornata di Andata</option>
+          <option value="2° Giornata di Andata">2° Giornata di Andata</option>
+          <option value="3° Giornata di Andata">3° Giornata di Andata</option>
+          <option value="4° Giornata di Andata">4° Giornata di Andata</option>
+          <option value="5° Giornata di Andata">5° Giornata di Andata</option>
+          <option value="6° Giornata di Andata">6° Giornata di Andata</option>
+          <option value="7° Giornata di Andata">7° Giornata di Andata</option>
+          <option value="1° Giornata di Ritorno">1° Giornata di Ritorno</option>
+          <option value="2° Giornata di Ritorno">2° Giornata di Ritorno</option>
+          <option value="3° Giornata di Ritorno">3° Giornata di Ritorno</option>
+          <option value="4° Giornata di Ritorno">4° Giornata di Ritorno</option>
+          <option value="5° Giornata di Ritorno">5° Giornata di Ritorno</option>
+          <option value="6° Giornata di Ritorno">6° Giornata di Ritorno</option>
+          <option value="7° Giornata di Ritorno">7° Giornata di Ritorno</option>
+          <option value="Play Off">Play Off</option>
+        </select>
+      </div>
+
+      <!-- Menu a tendina Tipo Roster -->
+      <div>
+        <label class="block text-xs font-bold text-amaranto uppercase mb-1">Gestione Roster</label>
+        <select id="roster-type-select" class="w-full border rounded p-2 text-xs font-semibold">
+          <option value="excel">Squadra standard (con Punteggi)</option>
+          <option value="manual">Inserisci i giocatori manualmente</option>
+        </select>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-2 border-t">
+        <button onclick="closeConfigModal()" class="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded">Annulla</button>
+        <button onclick="saveConfig()" class="px-4 py-2 bg-amaranto text-white text-xs font-bold rounded hover:bg-red-900">Salva e Applica</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE MODIFICA STATISTICHE GIOCATORE -->
+  <div id="edit-player-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-3">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col">
+      <div class="p-4 bg-amaranto text-white flex justify-between items-center rounded-t-xl">
+        <div><h3 id="edit-player-title" class="font-extrabold text-lg">Modifica statistiche</h3><p id="edit-player-subtitle" class="text-xs text-red-100 mt-1"></p></div>
+        <button onclick="closeEditPlayerStats()" class="text-white text-2xl px-2" aria-label="Chiudi">&times;</button>
+      </div>
+      <div class="p-4 overflow-y-auto">
+        <div id="edit-player-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4"></div>
+        <p class="text-xs text-slate-500 mb-3">Modifica i valori del periodo selezionato. I totali del giocatore verranno aggiornati automaticamente.</p>
+        <div id="edit-player-fields" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+      </div>
+      <div class="p-3 border-t flex justify-between gap-2">
+        <button onclick="closeEditPlayerStats()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded font-bold text-sm">Annulla</button>
+        <button onclick="saveEditPlayerStats()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-sm"><i class="fa-solid fa-floppy-disk mr-1"></i> Salva modifiche</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE STATISTICHE DI UN QUARTO -->
+  <div id="quarter-stats-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div class="p-4 bg-amaranto text-white flex justify-between items-center rounded-t-xl">
+        <h3 class="font-extrabold text-lg">Statistiche di squadra per quarto</h3>
+        <button onclick="closeQuarterStats()" class="text-white text-xl px-2" aria-label="Chiudi">&times;</button>
+      </div>
+      <div class="p-4 overflow-auto">
+        <label class="text-sm font-bold mr-2" for="quarter-stats-select">Quarto da visualizzare:</label>
+        <select id="quarter-stats-select" onchange="renderQuarterStats()" class="border rounded p-2 text-sm bg-white">
+          <option value="Q1">1° Quarto (Q1)</option><option value="Q2">2° Quarto (Q2)</option><option value="Q3">3° Quarto (Q3)</option><option value="Q4">4° Quarto (Q4)</option><option value="OT">Supplementare (OT)</option>
+        </select>
+        <div id="quarter-stats-content" class="mt-4"></div>
+      </div>
+      <div class="p-3 border-t flex justify-end"><button onclick="closeQuarterStats()" class="px-4 py-2 bg-slate-200 rounded font-bold text-sm">Chiudi</button></div>
+    </div>
+  </div>
+
+  <!-- LOGICA JAVASCRIPT -->
+  <script>
+    // Dati caricati dal file squadre.xlsx
+    const squadreExcelData = [
+      { name: "Riviera Rimini", venue: "Pala carim- Via Cuneo 11" },
+      { name: "Vigor Seregno", venue: "Palamoschini- Via della Porada 47" },
+      { name: "Junior Sassari", venue: "centro sportivo polivalente-via dessi" },
+      { name: "laumas Parma", venue: "Palaciti - Via Lazio 5" },
+      { name: "Icaro Brescia", venue: "Palestra Ugolinio- via repubblica Argentina 120" },
+      { name: "Asinara Abile", venue: "Palamura - Via Palladio" },
+      { name: "Wolf Pistoia", venue: "Palastra M.L.King- Via Santi 4" }
+    ];
+
+    // Roster predefinito completo
+    const defaultRosterData = [
+      { num: "0", name: "Magri Daniele", pointsClass: 2.5 },
+      { num: "4", name: "Ravicini Gianluca", pointsClass: 2.0 },
+      { num: "5", name: "Karlstrom Simon Alexander", pointsClass: 1.0 },
+      { num: "7", name: "Brandimarte Andrea", pointsClass: 1.0 },
+      { num: "10", name: "Costanzi Giulio", pointsClass: 1.0 },
+      { num: "11", name: "Belvedere Francesco", pointsClass: 5.0 },
+      { num: "13", name: "Rukavisnikovs Dmitrus", pointsClass: 1.5 },
+      { num: "14", name: "Bundzins Ralphins", pointsClass: 3.5 },
+      { num: "18", name: "Pereira Cardoso Flavio", pointsClass: 4.0 },
+      { num: "20", name: "Herman Jan", pointsClass: 2.0 },
+      { num: "25", name: "Urga Elvis", pointsClass: 3.0 },
+      { num: "31", name: "Taratufolo Ferdinando Moreno", pointsClass: 3.0 },
+      { num: "34", name: "Del Bene Marco", pointsClass: 2.0 },
+      { num: "69", name: "Berrugi Federico", pointsClass: 4.5 }
+    ];
+
+    let roster = [];
+    let selectedPlayerId = null;
+    let currentPeriod = "Q1";
+    let opponentName = "AVVERSARIO";
+    let opponentScore = 0;
+    let gameDate = "";
+    let gameLocation = "";
+    let gameRound = "Amichevole";
+    let actionHistory = [];
+
+    // Web Audio API per la riproduzione del bip senza file esterni
+    let audioCtx = null;
+    function playBeepSound() {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Nota La (880Hz)
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+      } catch (e) {
+        console.error("Audio error:", e);
+      }
+    }
+
+    // Animazione visiva del pulsante al click
+    function triggerButtonFeedback(btnElement) {
+      playBeepSound();
+      if (!btnElement) return;
+      btnElement.classList.add('btn-active-feedback');
+      setTimeout(() => {
+        btnElement.classList.remove('btn-active-feedback');
+      }, 200);
+    }
+
+    function init() {
+      document.getElementById('game-date-input').valueAsDate = new Date();
+      loadCustomOpponentTeams();
+      populateOpponentsDropdown();
+      
+      // Carica e renderizza immediatamente il roster predefinito
+      loadDefaultRoster();
+      
+      updateScoreboard();
+      openConfigModal();
+    }
+
+    // Carica le squadre inserite manualmente nelle aperture precedenti.
+    function loadCustomOpponentTeams() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('libertasCustomOpponentTeams') || '[]');
+        if (!Array.isArray(saved)) return;
+        saved.forEach(team => {
+          if (!team || !team.name) return;
+          const exists = squadreExcelData.some(t => t.name.toLowerCase() === String(team.name).trim().toLowerCase());
+          if (!exists) squadreExcelData.push({ name: String(team.name).trim(), venue: String(team.venue || '').trim() });
+        });
+      } catch (e) {
+        console.warn('Impossibile caricare le squadre personalizzate:', e);
+      }
+    }
+
+    // Aggiunge una squadra al menu e la conserva sul dispositivo.
+    function addOpponentTeam() {
+      const nameInput = document.getElementById('new-opponent-name');
+      const venueInput = document.getElementById('new-opponent-venue');
+      const name = nameInput.value.trim();
+      const venue = venueInput.value.trim();
+
+      if (!name) {
+        alert('Inserisci il nome della nuova squadra.');
+        nameInput.focus();
+        return;
+      }
+      if (squadreExcelData.some(team => team.name.toLowerCase() === name.toLowerCase())) {
+        alert('Questa squadra è già presente nella lista.');
+        nameInput.focus();
+        return;
+      }
+
+      const newTeam = { name, venue };
+      squadreExcelData.push(newTeam);
+      try {
+        const customTeams = JSON.parse(localStorage.getItem('libertasCustomOpponentTeams') || '[]');
+        customTeams.push(newTeam);
+        localStorage.setItem('libertasCustomOpponentTeams', JSON.stringify(customTeams));
+      } catch (e) {
+        console.warn('La squadra è stata aggiunta, ma non è stato possibile salvarla sul dispositivo:', e);
+      }
+
+      populateOpponentsDropdown();
+      document.getElementById('opp-name-select').value = name;
+      if (document.getElementById('match-type-trasferta').checked) {
+        document.getElementById('game-location-input').value = venue;
+      }
+      nameInput.value = '';
+      venueInput.value = '';
+      alert(`Squadra "${name}" aggiunta alla lista.`);
+    }
+
+    // Popola il menu a tendina delle squadre avversarie
+    function populateOpponentsDropdown() {
+      const select = document.getElementById('opp-name-select');
+      select.innerHTML = '';
+      squadreExcelData.forEach(sq => {
+        const opt = document.createElement('option');
+        opt.value = sq.name;
+        opt.textContent = sq.name;
+        select.appendChild(opt);
+      });
+      onMatchTypeChange();
+    }
+
+    // Gestione del cambio tra Casa e Trasferta
+    function onMatchTypeChange() {
+      const isCasa = document.getElementById('match-type-casa').checked;
+      const locationInput = document.getElementById('game-location-input');
+
+      if (isCasa) {
+        locationInput.value = "Palestra D'Alesio - Via F. Pera";
+      } else {
+        onOpponentSelectChange();
+      }
+    }
+
+    // Aggiorna il luogo della partita quando si sceglie la squadra se si è in Trasferta
+    function onOpponentSelectChange() {
+      const isTrasferta = document.getElementById('match-type-trasferta').checked;
+      if (!isTrasferta) return;
+
+      const selectedTeamName = document.getElementById('opp-name-select').value;
+      const teamObj = squadreExcelData.find(t => t.name === selectedTeamName);
+      if (teamObj) {
+        document.getElementById('game-location-input').value = teamObj.venue;
+      }
+    }
+
+    // Aggiungi / Sottrai punti avversario
+    function addOpponentScore(delta, btnElement) {
+      if (btnElement) triggerButtonFeedback(btnElement);
+      if (opponentScore + delta < 0) return;
+      opponentScore += delta;
+      actionHistory.push({ type: 'OPPONENT_SCORE', delta: delta });
+      updateScoreboard();
+    }
+
+    // Inserimento manuale tramite Prompt del punteggio avversario
+    function promptSetOpponentScore() {
+      const val = prompt("Inserisci il punteggio attuale della squadra avversaria:", opponentScore);
+      if (val === null) return;
+      const newScore = parseInt(val, 10);
+      if (!isNaN(newScore) && newScore >= 0) {
+        const delta = newScore - opponentScore;
+        opponentScore = newScore;
+        actionHistory.push({ type: 'OPPONENT_SCORE', delta: delta });
+        updateScoreboard();
+      }
+    }
+
+    function createNewPlayerObject(id, number, name, pointsClass = 1.0, inCourt = false) {
+      return {
+        id: id,
+        number: String(number),
+        name: name,
+        pointsClass: parseFloat(pointsClass) || 1.0,
+        inCourt: inCourt,
+        pts: 0, oreb: 0, dreb: 0, ast: 0, stl: 0, to: 0, blk: 0, blk_against: 0, pf: 0, df: 0,
+        ft_m: 0, ft_a: 0, fg2_m: 0, fg2_a: 0, fg3_m: 0, fg3_a: 0,
+        periodStats: {}
+      };
+    }
+
+    function loadDefaultRoster() {
+      roster = defaultRosterData.map((p, idx) => createNewPlayerObject(idx + 1, p.num, p.name, p.pointsClass, false));
+      renderRoster();
+      updateCourtSummary();
+    }
+
+    function getCourtStats() {
+      const playersInCourt = roster.filter(p => p.inCourt);
+      const count = playersInCourt.length;
+      const totalPoints = playersInCourt.reduce((sum, p) => sum + p.pointsClass, 0);
+      return { count, totalPoints: Math.round(totalPoints * 10) / 10, playersInCourt };
+    }
+
+    function updateCourtSummary() {
+      const { count, totalPoints, playersInCourt } = getCourtStats();
+      const countDisplay = document.getElementById('court-count-display');
+      const pointsDisplay = document.getElementById('court-points-display');
+      const banner = document.getElementById('court-points-banner');
+
+      countDisplay.innerText = `Giocatori in campo: ${count}/5`;
+      pointsDisplay.innerText = `${totalPoints.toFixed(1)} / 14.5`;
+
+      if (totalPoints > 14.5) {
+        banner.className = "p-2.5 bg-rose-900 text-white flex items-center justify-between border-b border-rose-700 shrink-0 animate-pulse";
+        pointsDisplay.className = "text-lg font-black text-yellow-300";
+      } else {
+        banner.className = "p-2.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-700 shrink-0";
+        pointsDisplay.className = "text-lg font-black text-emerald-400";
+      }
+
+      renderActiveCourtGrid(playersInCourt);
+    }
+
+    function renderActiveCourtGrid(playersInCourt) {
+      const container = document.getElementById('active-court-container');
+      container.innerHTML = '';
+
+      for (let i = 0; i < 5; i++) {
+        const player = playersInCourt[i];
+        const slot = document.createElement('div');
+
+        if (player) {
+          const isSelected = player.id === selectedPlayerId;
+          slot.className = `p-1.5 rounded border relative flex flex-col justify-between cursor-pointer transition-all ${
+            isSelected ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-400' : 'bg-white border-emerald-300 shadow-sm'
+          }`;
+          slot.onclick = () => selectPlayer(player.id);
+
+          slot.innerHTML = `
+            <div class="flex items-center justify-between border-b border-slate-100 pb-1">
+              <span class="bg-amaranto text-white text-[10px] font-bold px-1 rounded">#${player.number}</span>
+              <span class="text-[9px] font-bold bg-slate-100 text-slate-700 px-1 rounded">${player.pointsClass} PT</span>
+            </div>
+            <div class="text-[11px] font-bold text-slate-800 truncate my-1" title="${player.name}">${player.name.split(' ')[0]}</div>
+            <button onclick="toggleCourtStatus(${player.id}, event)" class="w-full bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-[9px] font-bold py-0.5 rounded flex items-center justify-center space-x-1 transition-all">
+              <i class="fa-solid fa-person-walking-arrow-right"></i>
+              <span>Panchina</span>
+            </button>
+          `;
+        } else {
+          slot.className = "border-2 border-dashed border-emerald-200 rounded flex flex-col items-center justify-center p-1 bg-emerald-50/50 text-emerald-300 text-center";
+          slot.innerHTML = `<span class="text-[10px] font-bold">SLOT ${i + 1}</span><span class="text-[9px]">Libero</span>`;
+        }
+        container.appendChild(slot);
+      }
+    }
+
+    function toggleCourtStatus(playerId, event) {
+      if (event) event.stopPropagation();
+      playBeepSound();
+      const player = roster.find(p => p.id === playerId);
+      if (!player) return;
+
+      if (!player.inCourt) {
+        const { count, totalPoints } = getCourtStats();
+
+        if (count >= 5) {
+          alert("ATTENZIONE: Ci sono già 5 giocatori in campo!\nFai uscire un giocatore (cliccando su 'Panchina') prima di farne entrare un altro.");
+          return;
+        }
+
+        const newTotal = Math.round((totalPoints + player.pointsClass) * 10) / 10;
+        if (newTotal > 14.5) {
+          alert(`⚠️ ATTENZIONE - LIMITE PUNTI SUPERATO!\n\nL'ingresso di ${player.name} (#${player.number} - Punti ${player.pointsClass}) porterebbe il totale in campo a ${newTotal} Punti.\n\nIl regolamento del Basket in Carrozzina impone un limite MASSIMO di 14,5 punti!\nEffettua prima una modifica per scendere sotto il limite.`);
+          return;
+        }
+
+        player.inCourt = true;
+      } else {
+        player.inCourt = false;
+      }
+
+      renderRoster();
+      updateCourtSummary();
+    }
+
+    function renderRoster() {
+      const container = document.getElementById('roster-list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!roster || roster.length === 0) {
+        container.innerHTML = `<div class="text-center p-6 text-slate-400 text-xs font-semibold">Nessun giocatore nel roster.<br>Aggiungi un giocatore o seleziona "Squadra standard".</div>`;
+        return;
+      }
+
+      const sortedRoster = [...roster].sort((a, b) => (b.inCourt ? 1 : 0) - (a.inCourt ? 1 : 0));
+
+      sortedRoster.forEach(player => {
+        const pir = calculatePIR(player);
+        const isSelected = player.id === selectedPlayerId;
+        
+        const card = document.createElement('div');
+        card.className = `p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+          isSelected ? 'bg-red-50 border-amaranto ring-2 ring-amaranto' : 'bg-white border-slate-200 hover:bg-slate-50'
+        }`;
+        card.onclick = () => selectPlayer(player.id);
+
+        card.innerHTML = `
+          <div class="flex items-center space-x-2.5">
+            <span class="w-8 h-8 rounded-full bg-amaranto text-white flex items-center justify-center font-bold text-xs shrink-0">#${player.number}</span>
+            <div>
+              <div class="font-bold text-sm text-slate-800 flex items-center space-x-1">
+                <span>${player.name}</span>
+                <span class="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded">P: ${player.pointsClass}</span>
+              </div>
+              <div class="text-[11px] text-slate-500">PTS: <b class="text-slate-800">${player.pts}</b> | REB: <b>${player.oreb + player.dreb}</b> | AST: <b>${player.ast}</b></div>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button onclick="editPlayerStats(${player.id}, event)" title="Modifica statistiche del giocatore" class="px-2 py-1 rounded text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+              <i class="fa-solid fa-pen-to-square"></i> Modifica
+            </button>
+            <button onclick="toggleCourtStatus(${player.id}, event)" class="px-2.5 py-1 rounded text-[11px] font-bold shadow-sm transition-colors ${
+              player.inCourt 
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+            }">
+              ${player.inCourt ? '<i class="fa-solid fa-user-check"></i> IN CAMPO' : '<i class="fa-solid fa-chair"></i> PANCHINA'}
+            </button>
+
+            <div class="text-right w-10">
+              <span class="text-[9px] text-slate-400 uppercase font-semibold block">PIR</span>
+              <span class="text-xs font-black ${pir >= 0 ? 'text-emerald-700' : 'text-rose-700'}">${pir}</span>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function selectPlayer(id) {
+      selectedPlayerId = id;
+      const player = roster.find(p => p.id === id);
+      if (player) {
+        document.getElementById('selected-player-display').innerText = `#${player.number} - ${player.name} (Punti: ${player.pointsClass})`;
+        document.getElementById('selected-player-pir').innerText = calculatePIR(player);
+      }
+      renderRoster();
+      updateCourtSummary();
+    }
+
+    function addManualPlayerPrompt() {
+      const num = prompt("Numero maglia del giocatore:");
+      if (num === null) return;
+      const name = prompt("Nome e Cognome del giocatore:");
+      if (!name) return;
+      const ptsVal = prompt("Punteggio di classificazione carrozzina (es. 1.0, 2.5, 4.5):", "1.0");
+      const pointsClass = parseFloat(ptsVal) || 1.0;
+
+      const newPlayer = createNewPlayerObject(Date.now(), num, name, pointsClass, false);
+      roster.push(newPlayer);
+      renderRoster();
+      updateCourtSummary();
+    }
+
+    function calculatePIR(p) {
+      const pts = p.pts;
+      const reb = p.oreb + p.dreb;
+      const missedFG = (p.fg2_a - p.fg2_m) + (p.fg3_a - p.fg3_m) + (p.ft_a - p.ft_m);
+      return (pts + reb + p.ast + p.stl + p.blk + p.df) - (missedFG + p.to + p.pf + p.blk_against);
+    }
+
+    const editableStatFields = [
+      ['ft_m', 'Tiri liberi realizzati'], ['ft_a', 'Tiri liberi tentati'],
+      ['fg2_m', 'Tiri da 2 realizzati'], ['fg2_a', 'Tiri da 2 tentati'],
+      ['fg3_m', 'Tiri da 3 realizzati'], ['fg3_a', 'Tiri da 3 tentati'],
+      ['oreb', 'Rimbalzi offensivi'], ['dreb', 'Rimbalzi difensivi'], ['ast', 'Assist'],
+      ['stl', 'Palle recuperate'], ['to', 'Palle perse'], ['blk', 'Stoppate'],
+      ['blk_against', 'Stoppate subite'], ['pf', 'Falli commessi'], ['df', 'Falli subiti']
+    ];
+
+    function getPeriodStats(player, period) {
+      if (!player.periodStats) player.periodStats = {};
+      if (!player.periodStats[period]) player.periodStats[period] = Object.fromEntries(editableStatFields.map(([key]) => [key, 0]));
+      return player.periodStats[period];
+    }
+
+    function recalculatePlayerTotals(player) {
+      editableStatFields.forEach(([key]) => {
+        player[key] = Object.values(player.periodStats || {}).reduce((sum, stats) => sum + (Number(stats[key]) || 0), 0);
+      });
+      player.pts = player.ft_m + player.fg2_m * 2 + player.fg3_m * 3;
+    }
+
+    function applyPeriodStatEvent(player, type, direction) {
+      const map = { FT_MADE: ['ft_m','ft_a'], FT_MISS: ['ft_a'], FG2_MADE: ['fg2_m','fg2_a'], FG2_MISS: ['fg2_a'], FG3_MADE: ['fg3_m','fg3_a'], FG3_MISS: ['fg3_a'], OREB: ['oreb'], DREB: ['dreb'], AST: ['ast'], STL: ['stl'], TO: ['to'], BLK: ['blk'], BLK_AGAINST: ['blk_against'], PF: ['pf'], DF: ['df'] };
+      const stats = getPeriodStats(player, currentPeriod);
+      (map[type] || []).forEach(key => { stats[key] = Math.max(0, (Number(stats[key]) || 0) + direction); });
+    }
+
+    let editingPlayerId = null;
+
+    function editPlayerStats(playerId, event) {
+      if (event) event.stopPropagation();
+      const player = roster.find(p => p.id === playerId);
+      if (!player) return;
+      editingPlayerId = playerId;
+      const period = currentPeriod;
+      const stats = getPeriodStats(player, period);
+      document.getElementById('edit-player-title').textContent = `Statistiche di ${player.name}`;
+      document.getElementById('edit-player-subtitle').textContent = `Giocatore #${player.number} · ${period}`;
+      const periodPts = (stats.ft_m || 0) + (stats.fg2_m || 0) * 2 + (stats.fg3_m || 0) * 3;
+      document.getElementById('edit-player-summary').innerHTML = `
+        <div class="rounded-lg bg-slate-100 p-3"><div class="text-xs text-slate-500">Punti nel periodo</div><div class="text-2xl font-black">${periodPts}</div></div>
+        <div class="rounded-lg bg-slate-100 p-3"><div class="text-xs text-slate-500">Rimbalzi</div><div class="text-2xl font-black">${(stats.oreb||0)+(stats.dreb||0)}</div></div>
+        <div class="rounded-lg bg-slate-100 p-3"><div class="text-xs text-slate-500">Assist</div><div class="text-2xl font-black">${stats.ast||0}</div></div>
+        <div class="rounded-lg bg-slate-100 p-3"><div class="text-xs text-slate-500">Punti totali partita</div><div class="text-2xl font-black">${player.pts||0}</div></div>`;
+      document.getElementById('edit-player-fields').innerHTML = editableStatFields.map(([key, label]) => `
+        <label class="block text-sm font-semibold text-slate-700">${label}
+          <input type="number" min="0" step="1" id="edit-stat-${key}" value="${Number(stats[key])||0}" inputmode="numeric" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 text-base font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>`).join('');
+      const modal = document.getElementById('edit-player-modal');
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+
+    function closeEditPlayerStats() {
+      const modal = document.getElementById('edit-player-modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+      editingPlayerId = null;
+    }
+
+    function saveEditPlayerStats() {
+      const player = roster.find(p => p.id === editingPlayerId);
+      if (!player) { closeEditPlayerStats(); return; }
+      const period = currentPeriod;
+      const stats = getPeriodStats(player, period);
+      const editedValues = {};
+      for (const [key, label] of editableStatFields) {
+        const input = document.getElementById(`edit-stat-${key}`);
+        const parsed = Number(input.value);
+        if (input.value.trim() === '' || !Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+          alert(`Il campo "${label}" deve contenere un numero intero maggiore o uguale a zero.`);
+          input.focus(); return;
+        }
+        editedValues[key] = parsed;
+      }
+      Object.assign(stats, editedValues);
+      recalculatePlayerTotals(player);
+      closeEditPlayerStats();
+      renderRoster(); updateScoreboard(); updateCourtSummary();
+      if (selectedPlayerId === player.id) selectPlayer(player.id);
+      if (!document.getElementById('quarter-stats-modal').classList.contains('hidden')) renderQuarterStats();
+    }
+
+    function showQuarterStats() {
+      const modal = document.getElementById('quarter-stats-modal');
+      document.getElementById('quarter-stats-select').value = currentPeriod;
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+      renderQuarterStats();
+    }
+
+    function closeQuarterStats() {
+      const modal = document.getElementById('quarter-stats-modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+
+    function renderQuarterStats() {
+      const period = document.getElementById('quarter-stats-select').value;
+      const rows = roster.map(p => {
+        const st = (p.periodStats && p.periodStats[period]) || {};
+        const pts = (st.ft_m || 0) + (st.fg2_m || 0) * 2 + (st.fg3_m || 0) * 3;
+        return { p, st, pts };
+      }).filter(r => r.pts || editableStatFields.some(([k]) => (r.st[k] || 0) > 0));
+
+      const sum = key => rows.reduce((n, r) => n + (Number(r.st[key]) || 0), 0);
+      const totalPts = rows.reduce((n, r) => n + r.pts, 0);
+
+      let html = `<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+        <div class="bg-slate-100 rounded p-3"><div class="text-xs text-slate-500">Punti squadra</div><div class="text-2xl font-black">${totalPts}</div></div>
+        <div class="bg-slate-100 rounded p-3"><div class="text-xs text-slate-500">Rimbalzi</div><div class="text-2xl font-black">${sum('oreb') + sum('dreb')}</div></div>
+        <div class="bg-slate-100 rounded p-3"><div class="text-xs text-slate-500">Assist</div><div class="text-2xl font-black">${sum('ast')}</div></div>
+        <div class="bg-slate-100 rounded p-3"><div class="text-xs text-slate-500">Palle recuperate</div><div class="text-2xl font-black">${sum('stl')}</div></div></div>`;
+      
+      html += `<div class="overflow-x-auto"><table class="w-full text-xs text-left border-collapse"><thead><tr class="bg-slate-800 text-white"><th class="p-2">Giocatore</th><th class="p-2">PTS</th><th class="p-2">T2</th><th class="p-2">T3</th><th class="p-2">TL</th><th class="p-2">RO</th><th class="p-2">RD</th><th class="p-2">AST</th><th class="p-2">REC</th><th class="p-2">PER</th><th class="p-2">STP</th><th class="p-2">FF</th><th class="p-2">FS</th></tr></thead><tbody>`;
+      
+      if (!rows.length) {
+        html += `<tr><td colspan="13" class="p-4 text-center text-slate-500">Nessuna statistica registrata per questo quarto.</td></tr>`;
+      }
+
+      rows.forEach(({p,st,pts}) => { 
+        html += `<tr class="border-b"><td class="p-2 font-semibold">#${p.number} ${p.name}</td><td class="p-2 font-bold">${pts}</td><td class="p-2">${st.fg2_m||0}/${st.fg2_a||0}</td><td class="p-2">${st.fg3_m||0}/${st.fg3_a||0}</td><td class="p-2">${st.ft_m||0}/${st.ft_a||0}</td><td class="p-2">${st.oreb||0}</td><td class="p-2">${st.dreb||0}</td><td class="p-2">${st.ast||0}</td><td class="p-2">${st.stl||0}</td><td class="p-2">${st.to||0}</td><td class="p-2">${st.blk||0}</td><td class="p-2">${st.pf||0}</td><td class="p-2">${st.df||0}</td></tr>`; 
+      });
+
+      html += `</tbody><tfoot><tr class="bg-slate-100 font-bold"><td class="p-2">TOTALE</td><td class="p-2">${totalPts}</td><td class="p-2">${sum('fg2_m')}/${sum('fg2_a')}</td><td class="p-2">${sum('fg3_m')}/${sum('fg3_a')}</td><td class="p-2">${sum('ft_m')}/${sum('ft_a')}</td><td class="p-2">${sum('oreb')}</td><td class="p-2">${sum('dreb')}</td><td class="p-2">${sum('ast')}</td><td class="p-2">${sum('stl')}</td><td class="p-2">${sum('to')}</td><td class="p-2">${sum('blk')}</td><td class="p-2">${sum('pf')}</td><td class="p-2">${sum('df')}</td></tr></tfoot></table></div>`;
+      
+      document.getElementById('quarter-stats-content').innerHTML = html;
+    }
+
+    function recordStat(type, btnElement) {
+      if (btnElement) triggerButtonFeedback(btnElement);
+
+      if (!selectedPlayerId) {
+        alert("Seleziona prima un giocatore dal roster o dalla sezione 'In Campo'!");
+        return;
+      }
+
+      const player = roster.find(p => p.id === selectedPlayerId);
+      actionHistory.push({ playerId: selectedPlayerId, type, period: currentPeriod });
+
+      switch (type) {
+        case 'FT_MADE': player.pts += 1; player.ft_m += 1; player.ft_a += 1; break;
+        case 'FT_MISS': player.ft_a += 1; break;
+        case 'FG2_MADE': player.pts += 2; player.fg2_m += 1; player.fg2_a += 1; break;
+        case 'FG2_MISS': player.fg2_a += 1; break;
+        case 'FG3_MADE': player.pts += 3; player.fg3_m += 1; player.fg3_a += 1; break;
+        case 'FG3_MISS': player.fg3_a += 1; break;
+        case 'OREB': player.oreb += 1; break;
+        case 'DREB': player.dreb += 1; break;
+        case 'AST': player.ast += 1; break;
+        case 'STL': player.stl += 1; break;
+        case 'TO': player.to += 1; break;
+        case 'BLK': player.blk += 1; break;
+        case 'BLK_AGAINST': player.blk_against += 1; break;
+        case 'PF': player.pf += 1; break;
+        case 'DF': player.df += 1; break;
+      }
+      applyPeriodStatEvent(player, type, 1);
+
+      updateScoreboard();
+      selectPlayer(selectedPlayerId);
+    }
+
+    function undoLastAction() {
+      if (actionHistory.length === 0) return;
+      playBeepSound();
+      const lastAction = actionHistory.pop();
+
+      if (lastAction.type === 'OPPONENT_SCORE') {
+        opponentScore -= lastAction.delta;
+        if (opponentScore < 0) opponentScore = 0;
+        updateScoreboard();
+        return;
+      }
+
+      const player = roster.find(p => p.id === lastAction.playerId);
+
+      if (player) {
+        const previousPeriod = currentPeriod;
+        currentPeriod = lastAction.period || currentPeriod;
+        applyPeriodStatEvent(player, lastAction.type, -1);
+        currentPeriod = previousPeriod;
+        switch (lastAction.type) {
+          case 'FT_MADE': player.pts -= 1; player.ft_m -= 1; player.ft_a -= 1; break;
+          case 'FT_MISS': player.ft_a -= 1; break;
+          case 'FG2_MADE': player.pts -= 2; player.fg2_m -= 1; player.fg2_a -= 1; break;
+          case 'FG2_MISS': player.fg2_a -= 1; break;
+          case 'FG3_MADE': player.pts -= 3; player.fg3_m -= 1; player.fg3_a -= 1; break;
+          case 'FG3_MISS': player.fg3_a -= 1; break;
+          case 'OREB': player.oreb -= 1; break;
+          case 'DREB': player.dreb -= 1; break;
+          case 'AST': player.ast -= 1; break;
+          case 'STL': player.stl -= 1; break;
+          case 'TO': player.to -= 1; break;
+          case 'BLK': player.blk -= 1; break;
+          case 'BLK_AGAINST': player.blk_against -= 1; break;
+          case 'PF': player.pf -= 1; break;
+          case 'DF': player.df -= 1; break;
+        }
+      }
+
+      updateScoreboard();
+      if (selectedPlayerId) selectPlayer(selectedPlayerId);
+    }
+
+    function updateScoreboard() {
+      const totalTeamPts = roster.reduce((sum, p) => sum + p.pts, 0);
+      document.getElementById('score-team').innerText = totalTeamPts;
+      document.getElementById('score-opp').innerText = opponentScore;
+      document.getElementById('opp-name-display').innerText = opponentName.substring(0, 8).toUpperCase();
+      
+      const dateFormatted = gameDate ? ` | ${gameDate}` : '';
+      const locFormatted = gameLocation ? ` (${gameLocation})` : '';
+      const roundFormatted = gameRound ? ` [${gameRound}]` : '';
+      document.getElementById('game-info-display').innerText = `vs ${opponentName}${dateFormatted}${locFormatted}${roundFormatted}`;
+    }
+
+    function changePeriod(val) { currentPeriod = val; }
+
+    function openConfigModal() {
+      document.getElementById('config-modal').classList.remove('hidden');
+      document.getElementById('config-modal').classList.add('flex');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('config-modal').classList.add('hidden');
+      document.getElementById('config-modal').classList.remove('flex');
+    }
+
+    function saveConfig() {
+      opponentName = document.getElementById('opp-name-select').value || "AVVERSARIO";
+      gameDate = document.getElementById('game-date-input').value;
+      gameLocation = document.getElementById('game-location-input').value;
+      gameRound = document.getElementById('game-round-select').value;
+      const rosterType = document.getElementById('roster-type-select').value;
+
+      if (rosterType === 'manual') {
+        roster = [];
+        selectedPlayerId = null;
+        resetPlayerSelectionDisplay();
+        renderRoster();
+        updateCourtSummary();
+      } else if (rosterType === 'excel') {
+        loadDefaultRoster();
+        selectedPlayerId = null;
+        resetPlayerSelectionDisplay();
+      }
+
+      updateScoreboard();
+      closeConfigModal();
+    }
+
+    function resetPlayerSelectionDisplay() {
+      document.getElementById('selected-player-display').innerText = "Nessun giocatore selezionato";
+      document.getElementById('selected-player-pir').innerText = "0";
+    }
+
+    // Calcolo della percentuale formattata
+    function getPercentage(made, attempted) {
+      if (!attempted || attempted === 0) return "0.0%";
+      return ((made / attempted) * 100).toFixed(1) + "%";
+    }
+
+    // ESPORTAZIONE EXCEL CON RISULTATO FINALE E STATISTICHE
+    async function exportXLS() {
+      const totalTeamPts = roster.reduce((sum, p) => sum + p.pts, 0);
+
+      // Righe di intestazione informativa e risultato complessivo
+      const data = [
+        ["Wheelchair Libertas 1947 - Report Statistiche Partita"],
+        [`Avversario: ${opponentName}`],
+        [`Data: ${gameDate || 'N.D.'} | Luogo: ${gameLocation || 'N.D.'} | Giornata: ${gameRound}`],
+        [`RISULTATO FINALE: Libertas ${totalTeamPts} - ${opponentName} ${opponentScore}`],
+        [] // riga vuota di spaziatura
+      ];
+
+      // Intestazione delle colonne della tabella
+      const header = [
+        "Num", "Nome", "PTS", "PIR", 
+        "T2 real.", "T2 tent.", "T2 %",
+        "T3 real.", "T3 tent.", "T3 %",
+        "TL real.", "TL tent.", "TL %",
+        "Rimb. off.", "Rimbalzi Dif.", "AST", "Palle Rec.", "Palle Per.", "Stoppate", "Falli comm.", "Falli Sub."
+      ];
+      data.push(header);
+
+      // Inserimento dati dei giocatori
+      roster.forEach(p => {
+        data.push([
+          p.number,
+          p.name,
+          p.pts,
+          calculatePIR(p),
+          p.fg2_m,
+          p.fg2_a,
+          getPercentage(p.fg2_m, p.fg2_a),
+          p.fg3_m,
+          p.fg3_a,
+          getPercentage(p.fg3_m, p.fg3_a),
+          p.ft_m,
+          p.ft_a,
+          getPercentage(p.ft_m, p.ft_a),
+          p.oreb,
+          p.dreb,
+          p.ast,
+          p.stl,
+          p.to,
+          p.blk,
+          p.pf,
+          p.df
+        ]);
+      });
+
+      // Creazione cartella di lavoro e foglio Excel
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, "Statistiche Partita");
+
+      // Generazione di un nome file pulito
+      const cleanOpponent = (opponentName || 'Avversario').replace(/[^a-z0-9]/gi, '_');
+      const cleanDate = (gameDate || 'Partita').replace(/[^a-z0-9]/gi, '-');
+      const fileName = `Stats_${cleanOpponent}_${cleanDate}.xlsx`;
+
+      try {
+        XLSX.writeFile(wb, fileName, { bookType: 'xlsx', type: 'binary' });
+      } catch (err) {
+        console.error("Errore durante l'esportazione Excel:", err);
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }
+    }
+
+    // Assicura l'inizializzazione immediata sia all'evento load che al parsing DOM completo
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
